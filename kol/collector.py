@@ -136,6 +136,8 @@ class Collector:
             t.vol_usd = (_f(d.get("solAmount")) or 0) * self.sol_usd
             self._observe(t, t.mc_usd, now)
         t.next_poll = now + 15                     # DexScreener needs a few seconds to index it
+        if not t.mayhem and t.uri:
+            self._queue_meta(t)                    # socials, needed at creation by some New columns
         self.tokens[mint] = t
         self.dirty.add(mint)
         self.counts["creates"] += 1
@@ -194,6 +196,8 @@ class Collector:
                 t.mc_usd = float(m["mc"])
             t.liq_usd = m["liq"]
             t.pair, t.dex_id = m["pair"], m["dex_id"]
+            if not t.name and not t.symbol:        # first seen at migration: no creation event
+                t.name, t.symbol = m.get("name", ""), m.get("symbol", "")
             if m["has_bc"]:
                 t.vol_bc_usd = m["vol_bc"]
             if m["has_amm"]:
@@ -360,8 +364,13 @@ class Collector:
         if t.supply_raw is None:
             t.supply_raw = await rpc.supply(t.mint) or 1e15
         addr = t.bonding_curve or t.mint
+        # "first 3 slots" snipers / creation-slot insiders only mean something for pump.fun bonding-curve
+        # launches; for other launchpads they stay unknown rather than wrong
+        pump_launch = bool(t.seen_create or t.mint.endswith("pump"))
+        if pump_launch and not t.sniper_list and t.tx_complete and t.mint not in self.early_sigs:
+            t.sig_newest = ""                      # restarted since the first look: fetch the first slots again
         recent = await self._update_signatures(t, addr)
-        if not t.sniper_list and t.mint in self.early_sigs:
+        if pump_launch and not t.sniper_list and t.mint in self.early_sigs:
             await self._find_snipers(t)
         early = {s["signature"] for s in self.early_sigs.get(t.mint, ())}
         for s in recent:
@@ -377,9 +386,11 @@ class Collector:
         t.token_program = prog or t.token_program
         exclude = {x for x in (t.bonding_curve, t.pair) if x}
         snipers = set(json.loads(t.sniper_list)) if t.sniper_list else set()
-        h = solana.holdings(accounts, t.supply_raw, t.dev, snipers, exclude)
+        insiders = set(json.loads(t.insider_list)) if t.insider_list else set()
+        h = solana.holdings(accounts, t.supply_raw, t.dev, snipers, exclude, insiders)
         t.holders, t.dev_pct, t.top10_pct = h["holders"], h["dev_pct"], h["top10_pct"]
         t.snipers_pct = h["snipers_pct"] if t.sniper_list else None
+        t.insiders_pct = h["insiders_pct"] if t.sniper_list else None
         t.audited_at = time.time()
         t.audits += 1
         self._recompute_fees(t)
@@ -434,6 +445,7 @@ class Collector:
                         bundle.add(owner)
         t.early_n, t.fee_early_sol = n, cost
         t.sniper_list = json.dumps(sorted(buyers))
+        t.insider_list = json.dumps(sorted(bundle))
         t.snipers, t.bundle_buyers = len(buyers), len(bundle)
 
     def _recompute_fees(self, t: Token) -> None:
@@ -472,8 +484,14 @@ class Collector:
                         t.twitter = t.twitter or s["twitter"]
                         t.telegram = t.telegram or s["telegram"]
                         t.website = t.website or s["website"]
+                        t.community = t.community or s.get("community", "")
                     t.socials_checked = 1 if s else 2
+                    self.counts["meta_ok" if s else "meta_failed"] += 1
                     self.dirty.add(mint)
+                    self._evaluate(t, time.time())
+            except Exception:  # noqa: BLE001
+                self.counts["meta_failed"] += 1
+                log.exception("metadata %s failed", mint)
             finally:
                 self.meta_pending.discard(mint)
 
@@ -548,6 +566,8 @@ class Collector:
             "rpc": {"public": self.s.public_rpc, "calls": self.rpc.calls, "errors": self.rpc.errors,
                     "last_error": self.rpc.last_error, "audits": self.counts["audits"],
                     "audit_errors": self.counts["audit_errors"], "queue": self.audit_q.qsize()},
+            "meta": {"ok": self.counts["meta_ok"], "failed": self.counts["meta_failed"],
+                     "queue": self.meta_q.qsize()},
             "events": list(self.events)[:30],
         }
 
@@ -555,7 +575,7 @@ class Collector:
         self.load()
         tasks = [self.pp.run(), self.poll_loop(), self.price_loop(), self.flush_loop()]
         tasks += [self.audit_worker() for _ in range(2)]
-        tasks += [self.meta_worker() for _ in range(3)]
+        tasks += [self.meta_worker() for _ in range(6)]
         await asyncio.gather(*tasks)
 
 

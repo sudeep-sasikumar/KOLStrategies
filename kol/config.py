@@ -88,7 +88,7 @@ def load() -> Settings:
 # ---- collector tuning --------------------------------------------------------------------------
 # How often each token is looked at. Every token is followed for 24 h so the dashboard can tell
 # which filters caught the runners and which runners were missed.
-LIVE_WINDOW_S = 20 * 60          # poll every token closely for its first 20 minutes
+LIVE_WINDOW_S = 25 * 60          # poll every token closely for its first 25 minutes (Soon columns: up to 24)
 LIVE_POLL_S = 20
 HOT_MC_USD = 20_000              # tokens above this market cap are polled every minute
 HOT_POLL_S = 60

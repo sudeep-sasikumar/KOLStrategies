@@ -15,10 +15,11 @@ SESSIONS = (("Asia", 22, 7), ("Europe", 7, 13), ("EU+US overlap", 13, 16), ("US"
 FEATURES = (
     ("age_min", "Age at hit (min)"), ("mc_usd", "Market cap ($)"), ("vol_usd", "Volume ($)"),
     ("holders", "Holders"), ("dev_pct", "Dev holding %"), ("snipers_pct", "Snipers %"),
-    ("snipers", "Sniper wallets"), ("bundle_buyers", "Bundle buyers (creation slot)"),
+    ("insiders_pct", "Insiders % (creation-slot buyers)"), ("snipers", "Sniper wallets"), ("bundle_buyers", "Bundle buyers (creation slot)"),
     ("top10_pct", "Top 10 %"), ("fees_sol", "Total fees (SOL, est.)"), ("tx_count", "Transactions"),
     ("buy_ratio", "Buys / (buys + sells)"), ("dev_initial_pct", "Dev initial buy %"),
-    ("progress_pct", "Bonding progress %"), ("has_socials", "Has socials (share)"),
+    ("progress_pct", "Bonding progress %"), ("has_socials", "Has X / Telegram / website (share)"),
+    ("has_community", "Has pump.fun community link (share)"),
 )
 
 
@@ -162,12 +163,13 @@ def _feature_compare(matured) -> list[dict]:
         b, s = snap.get("buys"), snap.get("sells")
         snap["buy_ratio"] = b / (b + s) if b is not None and s is not None and (b + s) else None
         snap["has_socials"] = 1.0 if snap.get("has_socials") else 0.0
+        snap["has_community"] = 1.0 if snap.get("has_community") else 0.0
         (win if (_mult(r) or 0) >= 2 else lose).append(snap)
     rows = []
     for key, label in FEATURES:
         w = [x.get(key) for x in win if x.get(key) is not None]
         l_ = [x.get(key) for x in lose if x.get(key) is not None]
-        if key == "has_socials":
+        if key in ("has_socials", "has_community"):
             rows.append({"key": key, "label": label, "win": sum(w) / len(w) * 100 if w else None,
                          "lose": sum(l_) / len(l_) * 100 if l_ else None, "n_win": len(w), "n_lose": len(l_),
                          "pct": True})

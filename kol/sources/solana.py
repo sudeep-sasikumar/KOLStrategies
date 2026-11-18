@@ -130,7 +130,7 @@ def parse_token_accounts(res: list[dict]) -> list[tuple[str, int]]:
 
 
 def holdings(accounts: list[tuple[str, int]], supply: float, dev: str, snipers: set[str],
-             exclude: set[str]) -> dict:
+             exclude: set[str], insiders: set[str] | None = None) -> dict:
     """Holder count, dev %, sniper %, top-10 % (pool / bonding-curve accounts excluded)."""
     by_owner: dict[str, int] = defaultdict(int)
     for owner, amt in accounts:
@@ -142,6 +142,7 @@ def holdings(accounts: list[tuple[str, int]], supply: float, dev: str, snipers: 
         "holders": len(by_owner),
         "dev_pct": by_owner.get(dev, 0) / supply * 100 if dev else None,
         "snipers_pct": sum(by_owner.get(s, 0) for s in snipers) / supply * 100,
+        "insiders_pct": sum(by_owner.get(s, 0) for s in (insiders or ())) / supply * 100,
         "top10_pct": sum(top) / supply * 100,
     }
 

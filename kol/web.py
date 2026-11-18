@@ -65,7 +65,7 @@ def board(coll, strat) -> dict:
     out = {}
     for col in strat.columns:
         mints = set(coll.passing.get((strat.key, col.key), ()))
-        if col.key == "new":       # New passes for one minute only: show the last 10 minutes of hits
+        if col.key == "new":       # tokens pass through New fast: also show the last 10 minutes of hits
             mints |= {m for m, hs in coll.hits_by_mint.items()
                       if any(h.strategy == strat.key and h.col == "new" and now - h.hit_at < 600 for h in hs)}
         rows = []

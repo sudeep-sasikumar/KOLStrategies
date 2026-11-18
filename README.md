@@ -4,14 +4,15 @@ Studies the memecoin strategies that well-known traders (KOLs) describe. For eac
 on every token the strategy would have shown, follows what happened next, and looks for patterns. The
 results are on a dashboard with one tab per strategy.
 
-**Telegram signals are off.** The bot only sends a start-up notice. Signals get designed once enough
-data says something.
+**Telegram signals are off.** The bot only sends a start-up notice. Signals are built from patterns
+the collected data shows: hundreds of settled hits per column. No rule is guessed in advance.
 
 Strategies so far:
 
 | Tab | Source | What is tested |
 |---|---|---|
 | Daumen - New Filters | [YouTube, 12 Nov 2026](https://www.youtube.com/watch?v=qONQbEUQx9Y) · [notes](docs/strategies/daumen-filters.md) | His Terminal (Padre) board filters for the New, Soon and Migrated columns |
+| Daumen - Old Filters | [YouTube, 7 Oct 2026](https://www.youtube.com/watch?v=KBgcOGWEARY) · [notes](docs/strategies/daumen-old-filters.md) | His earlier filters. New requires a social. Soon allows up to 24 min and adds an insiders limit. Migrated has the same values as the new filters |
 
 ---
 
@@ -19,7 +20,7 @@ Strategies so far:
 
 1. **Sees every new pump.fun token** the moment it is created, and every migration (PumpPortal websocket).
 2. **Follows each token for 24 hours.** It reads market cap, volume and buys/sells from DexScreener: every 20 s
-   for the first 20 minutes, then every minute above $20K, every 10 minutes above $7K, and at 1 h / 6 h / 24 h.
+   for the first 25 minutes, then every minute above $20K, every 10 minutes above $7K, and at 1 h / 6 h / 24 h.
 3. **Looks on-chain only when a column is interested.** If a token passes a column's cheap filters (age, market
    cap, volume), or reaches $10K early, it reads from the Solana RPC: holders, dev holding %, sniper holding %,
    transaction count and the fee estimate.
@@ -44,12 +45,20 @@ Terminal (Padre) computes some values its own way. The dashboard labels each fil
   volume come from DexScreener. Holders and dev % are on-chain balances (pool and bonding-curve accounts excluded).
 - **approx**: our reading of the definition.
   - **Snipers:** wallets other than the dev that bought in the creation slot or the next 2 slots (~1.2 s).
-  - **Keywords:** name and symbol are matched against "FREE ENTRY" and "READ OR". One word in the video is
-    censored, so it can't be matched.
+  - **Keywords:** name and symbol are matched against the readable phrases ("FREE ENTRY", "READ OR"). The
+    censored or blurred parts in the videos can't be matched.
+  - **Insiders (old filters):** wallets other than the dev that bought in the creation slot itself, i.e.
+    bundled with the launch. Terminal's exact definition isn't public.
+  - **At least one social (old filters):** an X, Telegram or website link in the token's metadata.
+    - pump.fun now adds an automatic "coin community" link to most tokens: 25 of 30 sampled had one, but only
+      10 of 30 had a real link.
+    - That community link is recorded but not counted as a social, so the filter is stricter than
+      "99% have one".
+    - The dashboard compares winners on both.
 - **estimate**: **Total fees (SOL)**. This is what traders paid to land their transactions: network fee,
   priority fee and Jito tips. Terminal uses it to separate real activity from cheap bot volume. It adds two parts:
   - the exact cost of every transaction in the first 3 slots;
-  - the average cost of sampled later transactions � the rest of the transaction count.
+  - the average cost of sampled later transactions × the rest of the transaction count.
 
   pump.fun's own 1.25% trading fee is **not** included; it is stored separately (`fees_trade_sol`). Padre
   doesn't publish its formula. Compare a few tokens with Terminal and we'll calibrate.
@@ -62,7 +71,7 @@ Terminal (Padre) computes some values its own way. The dashboard labels each fil
 | DexScreener `/tokens/v1` | market cap, volume, buys/sells, socials | 300 req/min (we use ≤ 200) |
 | Solana RPC | holders, dev %, snipers, transaction count, fees | public RPC ~4 req/s; set `SOLANA_RPC_URL` for a private one |
 | Binance / Coinbase / Kraken | SOL/USD | |
-| IPFS metadata | socials the creator linked | |
+| IPFS metadata (4everland, ipfs.io, Pinata gateways) | socials the creator linked; read for every new non-Mayhem token | |
 
 pump.fun's own APIs are behind Cloudflare bot protection, so they are not used.
 

@@ -5,13 +5,15 @@ import asyncio
 
 import aiohttp
 
-GATEWAYS = ("https://ipfs.io/ipfs/", "https://dweb.link/ipfs/")
+GATEWAYS = ("https://4everland.io/ipfs/", "https://ipfs.io/ipfs/", "https://gateway.pinata.cloud/ipfs/")
 
 
 def _candidates(uri: str) -> list[str]:
+    """Fast public gateways first, then the creator's own URI."""
     if "/ipfs/" in uri:
         cid = uri.split("/ipfs/", 1)[1]
-        return [uri] + [g + cid for g in GATEWAYS if not uri.startswith(g)]
+        out = [g + cid for g in GATEWAYS]
+        return out + ([uri] if uri not in out else [])
     return [uri]
 
 
@@ -30,5 +32,6 @@ async def fetch_socials(session: aiohttp.ClientSession, uri: str) -> dict | None
             return None
         ext = j.get("extensions") if isinstance(j.get("extensions"), dict) else {}
         pick = lambda k: str(j.get(k) or ext.get(k) or "")[:200]  # noqa: E731
-        return {"twitter": pick("twitter"), "telegram": pick("telegram"), "website": pick("website")}
+        return {"twitter": pick("twitter"), "telegram": pick("telegram"), "website": pick("website"),
+                "community": pick("coin_community")}
     return None

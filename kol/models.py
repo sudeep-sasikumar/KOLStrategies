@@ -38,6 +38,7 @@ class Token:
     top10_pct: float | None = None
     snipers: int | None = None
     snipers_pct: float | None = None
+    insiders_pct: float | None = None         # holdings of non-dev wallets that bought in the creation slot
     bundle_buyers: int | None = None          # non-dev buyers in the creation slot
     tx_count: int | None = None               # bonding-curve transactions (incl. failed ones: they pay fees too)
     tx_complete: int = 0
@@ -56,10 +57,12 @@ class Token:
     sig_newest: str = ""
     create_slot: int | None = None
     sniper_list: str = ""                     # JSON list of sniper wallets
+    insider_list: str = ""                    # JSON list of creation-slot buyers (bundled with the launch)
     # socials (token metadata)
     twitter: str = ""
     telegram: str = ""
     website: str = ""
+    community: str = ""                       # pump.fun's auto "coin community" page (not counted as a social)
     socials_checked: int = 0
     # outcome tracking
     peak_mc: float | None = None

@@ -68,6 +68,8 @@ def summarize(pairs: list[dict]) -> dict:
         "mc": main.get("marketCap") or main.get("fdv"),
         "liq": (main.get("liquidity") or {}).get("usd"),
         "pair": main.get("pairAddress") or "",
+        "name": str((main.get("baseToken") or {}).get("name") or "")[:80],
+        "symbol": str((main.get("baseToken") or {}).get("symbol") or "")[:30],
         "dex_id": main.get("dexId") or "",
         "has_bc": any(p.get("dexId") == "pumpfun" for p in pairs),
         "has_amm": any(p.get("dexId") != "pumpfun" for p in pairs),

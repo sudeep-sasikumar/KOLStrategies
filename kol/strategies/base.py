@@ -18,7 +18,7 @@ class Filter:
     key: str
     label: str
     feature: str            # key in features()
-    op: str                 # "<=", ">=", "is_false", "excludes_any"
+    op: str                 # "<=", ">=", "is_false", "is_true", "excludes_any"
     value: object = None
     quality: str = EXACT
     audit: bool = False     # needs an on-chain look-up (holders, dev %, snipers, fees)
@@ -38,6 +38,8 @@ class Filter:
             return v >= self.value
         if self.op == "is_false":
             return not v
+        if self.op == "is_true":
+            return bool(v)
         raise ValueError(self.op)
 
     def describe(self) -> str:
@@ -47,6 +49,8 @@ class Filter:
             return f"min {self.value:,}" if isinstance(self.value, (int, float)) else f"min {self.value}"
         if self.op == "is_false":
             return "hide"
+        if self.op == "is_true":
+            return "required"
         if self.op == "excludes_any":
             return "exclude: " + ", ".join(self.value or ()) if self.value else "(none)"
         return str(self.value)
@@ -91,6 +95,10 @@ def features(t: Token, now: float, sol_usd: float | None) -> dict:
         "text": f"{t.name} {t.symbol}",
         "migrated": t.migrated_at is not None,
         "has_socials": t.has_socials,
+        # True / False once the metadata was read (or DexScreener shows a link); None while unknown
+        "socials": True if t.has_socials else (False if t.socials_checked == 1 else None),
+        "insiders_pct": t.insiders_pct,
+        "has_community": bool(t.community),
         "progress_pct": t.progress_pct,
         "buys": t.buys,
         "sells": t.sells,

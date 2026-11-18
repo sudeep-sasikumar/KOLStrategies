@@ -141,3 +141,36 @@ def test_collector_flow_and_report(tmp_path):
     assert hit.peak_mc == 30_000
     ev = json.loads(conn.execute("SELECT failed FROM evals WHERE col='soon'").fetchone()[0])
     assert ev == []
+
+
+def test_old_filters_new_column_needs_a_social():
+    from kol.strategies.daumen_old import NEW as OLD_NEW
+    now = time.time()
+    t = _tok(created_at=now - 200, mc_usd=3000)          # no age filter: 3+ minutes old is fine
+    r = evaluate(OLD_NEW, features(t, now, 74))
+    assert not r.passed and r.unknown == ["socials"]      # metadata not read yet
+    t.socials_checked = 1
+    assert evaluate(OLD_NEW, features(t, now, 74)).failed == ["socials"]
+    t.community = "https://coincommunities.org/x"       # pump.fun's auto link does not count
+    assert evaluate(OLD_NEW, features(t, now, 74)).failed == ["socials"]
+    t.twitter = "https://x.com/abc"
+    assert evaluate(OLD_NEW, features(t, now, 74)).passed
+    t.mc_usd = 31_000
+    assert evaluate(OLD_NEW, features(t, now, 74)).failed == ["mc_max"]
+
+
+def test_old_filters_soon_insiders():
+    from kol.strategies.daumen_old import SOON as OLD_SOON
+    now = time.time()
+    t = _tok(created_at=now - 20 * 60, mc_usd=8000, vol_usd=5000, holders=3, dev_pct=20, snipers_pct=24,
+             insiders_pct=10, fees_sol=0.06)
+    assert evaluate(OLD_SOON, features(t, now, 74)).passed   # 20 min old, no holders filter
+    t.insiders_pct = 30
+    assert evaluate(OLD_SOON, features(t, now, 74)).failed == ["insiders"]
+    t.insiders_pct, t.created_at = 10, now - 25 * 60
+    assert evaluate(OLD_SOON, features(t, now, 74)).failed == ["age"]
+
+
+def test_insiders_holdings():
+    h = solana.holdings([("dev", 100), ("i1", 200), ("s", 50)], 1000, "dev", {"s", "i1"}, set(), {"i1"})
+    assert h["insiders_pct"] == 20 and h["snipers_pct"] == 25

@@ -123,6 +123,7 @@ function renderOverview() {
       ${tile("DexScreener calls", num(s.dex.requests), s.dex.errors ? esc(s.dex.errors + " errors · " + s.dex.last_error) : "no errors")}
       ${tile("Solana RPC calls", num(s.rpc.calls), (s.rpc.public ? "public RPC" : "private RPC") + (s.rpc.errors ? " · " + esc(s.rpc.errors + " retries · " + s.rpc.last_error) : ""))}
       ${tile("On-chain audits", num(s.rpc.audits), num(s.rpc.queue) + " queued" + (s.rpc.audit_errors ? " · " + num(s.rpc.audit_errors) + " failed" : ""))}
+      ${tile("Token metadata", num(s.meta.ok), (s.meta.failed ? num(s.meta.failed) + " failed · " : "") + num(s.meta.queue) + " queued")}
       ${tile("Database", num(s.db_mb, 1) + " MB")}
     </div></div>
     <div class="grid2">
@@ -162,7 +163,7 @@ function renderStrategy(s) {
         </table><details><summary>His reasons</summary><ul>${c.reasons.map(r => `<li>${esc(r)}</li>`).join("")}</ul></details></div>`).join("")}
     </div></div>
     <div class="card"><div class="row"><h2 style="margin:0">Live board</h2><span class="muted" id="board-at"></span></div>
-      <p class="note">Tokens passing each column now (New: hits from the last 10 minutes, since its window is 1 minute).</p>
+      <p class="note">Tokens passing each column now. New also lists its hits from the last 10 minutes, since tokens pass through it fast.</p>
       <div class="grid3" id="board">${s.columns.map(c => `<div><h3>${esc(c.title)}</h3><div class="board-col" id="board-${esc(c.key)}"><span class="muted">…</span></div></div>`).join("")}</div>
     </div>
     <div class="card"><div class="row"><h2 style="margin:0">Results</h2><span class="spacer"></span>
