@@ -14,7 +14,7 @@ NEW = Column(
     key="new", title="New", stage="new", horizon_s=5 * 60,
     filters=(
         MAYHEM,
-        Filter("mc_max", "Market cap ($)", "mc_usd", "<=", 30_000, note="no minimum"),
+        Filter("mc_max", "Market cap max ($)", "mc_usd", "<=", 30_000, note="no minimum"),
         Filter("socials", "At least one social", "socials", "is_true", quality=APPROX,
                note="X, Telegram or website in the token metadata. pump.fun's automatic 'coin community' "
                     "link is recorded but not counted"),

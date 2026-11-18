@@ -16,8 +16,8 @@ NEW = Column(
     filters=(
         MAYHEM,
         Filter("age", "Token age (mins)", "age_min", "<=", 1),
-        Filter("mc_min", "Market cap ($)", "mc_usd", ">=", 1_000),
-        Filter("mc_max", "Market cap ($)", "mc_usd", "<=", 30_000),
+        Filter("mc_min", "Market cap min ($)", "mc_usd", ">=", 1_000),
+        Filter("mc_max", "Market cap max ($)", "mc_usd", "<=", 30_000),
         KEYWORD_FILTER,
     ),
     reasons=(

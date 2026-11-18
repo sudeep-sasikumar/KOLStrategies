@@ -30,8 +30,17 @@ Strategies so far:
    failed.
 5. **The dashboard turns this into answers.**
    - How often each column's hits went 2x / 5x / 10x, became runners or migrated.
-   - **Runners caught vs missed.** A runner is a token whose market cap reaches $100K within 24 h. For each
-     missed runner, the dashboard shows which filters it failed.
+   - **Runners caught vs missed.** A runner is a token that, within 24 h:
+     - peaks at a market cap of $100K or more;
+     - peaks at least 3× its launch market cap;
+     - trades at least $50K.
+
+     The last two keep out tokens that launch big or never trade. For each missed runner, the dashboard shows
+     which filters it failed.
+   - **Scope: pump.fun launches only.** PumpPortal also streams other launchpads (e.g. Bonk). Those tokens are
+     recorded and counted on the dashboard as "Other launchpads", but never evaluated: the bonding-curve maths,
+     snipers and insiders are pump.fun-specific. Tokens seen only at migration count if their mint ends in
+     "pump".
    - **Which filter costs runners.** It counts the tokens that failed only one filter: how many that filter
      removed, and how many of those became runners. This tests Daumen's stated goal: less noise, no missed runners.
    - **Winners vs the rest.** Median holders, dev %, snipers %, fees, volume and so on at the moment of the hit,

@@ -111,4 +111,9 @@ BONDING_FEE_RATE = 0.0125
 AMM_FEE_RATE = 0.0030
 
 # outcome labels
-RUNNER_MC_USD = 100_000          # a token whose market cap reaches this within 24 h is a "runner"
+# A "runner": within 24 h its market cap peaks at $100K or more, at least 3x its market cap at launch, and it
+# trades at least $50K. The last two stop tokens that launch big, or never trade, from counting as runners.
+RUNNER_MC_USD = 100_000
+RUNNER_MIN_MULT = 3
+RUNNER_MIN_VOL_USD = 50_000
+RUNNER_RULE = "peak ≥ $100K, ≥ 3× its launch market cap and ≥ $50K volume, within 24 h"

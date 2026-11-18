@@ -21,6 +21,7 @@ class Token:
     initial_buy: float | None = None          # tokens the dev bought in the creation transaction
     dev_initial_pct: float | None = None
     mc_sol_create: float | None = None
+    mc_create_usd: float | None = None        # market cap at launch in USD (creation event x SOL price)
     migrated_at: float | None = None
     # market data (DexScreener)
     pair: str = ""

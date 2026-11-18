@@ -174,3 +174,30 @@ def test_old_filters_soon_insiders():
 def test_insiders_holdings():
     h = solana.holdings([("dev", 100), ("i1", 200), ("s", 50)], 1000, "dev", {"s", "i1"}, set(), {"i1"})
     assert h["insiders_pct"] == 20 and h["snipers_pct"] == 25
+
+
+def test_other_launchpads_are_not_evaluated():
+    from kol.strategies.base import in_stage, in_universe
+    now = time.time()
+    bonk = _tok(pool="bonk", mint="Abc", mc_usd=3000)
+    assert not in_universe(bonk) and not in_stage(NEW, bonk, now)
+    assert in_universe(_tok(pool="pump", mint="Xyz"))
+    assert in_universe(Token(mint="Abcpump")) and not in_universe(Token(mint="Abc123"))   # seen only at migration
+
+
+def test_runner_rule(tmp_path):
+    conn = db.connect(tmp_path / "r.sqlite")
+    db.init(conn)
+    now = time.time()
+    rows = [  # mint, pool, launch mc, peak, volume -> runner?
+        ("Apump", "pump", 2000, 150_000, 80_000),     # yes
+        ("Bpump", "pump", 2000, 150_000, 10_000),     # no: too little volume
+        ("Cpump", "pump", 60_000, 150_000, 90_000),   # no: only 2.5x its launch market cap
+        ("Dbonk", "bonk", 2000, 900_000, 900_000),    # no: other launchpad
+    ]
+    db.save_tokens(conn, [Token(mint=m, pool=p, first_seen=now - 60, created_at=now - 60, seen_create=1,
+                                mc_create_usd=mc0, peak_mc=pk, vol_usd=v) for m, p, mc0, pk, v in rows])
+    conn.commit()
+    rep = analysis.strategy_report(db.connect(tmp_path / "r.sqlite", readonly=True), STRATEGY, 1)
+    assert rep["universe"]["created"] == 3 and rep["universe"]["other_launchpads"] == 1
+    assert rep["universe"]["runners"] == 1

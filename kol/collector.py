@@ -29,7 +29,7 @@ from .sources.prices import fetch_sol_usd
 from .sources.pumpportal import PumpPortal
 from .sources.solana import RPCError, SolanaRPC
 from .strategies import STRATEGIES
-from .strategies.base import evaluate, features, in_stage
+from .strategies.base import evaluate, features, in_stage, in_universe
 from .util import progress_from_mc_sol
 
 log = logging.getLogger("kol.collector")
@@ -74,6 +74,13 @@ class Collector:
 
     # ---- start-up ---------------------------------------------------------------------------
     def load(self) -> None:
+        sol = db.get_state(self.conn, "sol_usd")
+        if sol:   # tokens recorded before mc_create_usd existed: launch MC in SOL x the last known SOL price
+            n = self.conn.execute("UPDATE tokens SET mc_create_usd = mc_sol_create * ? WHERE mc_create_usd IS NULL "
+                                  "AND mc_sol_create IS NOT NULL", (sol,)).rowcount
+            self.conn.commit()
+            if n:
+                log.info("filled launch market cap for %d older tokens (SOL $%.2f)", n, sol)
         for t in db.load_active(self.conn):
             self.tokens[t.mint] = t
         for h in db.load_open_hits(self.conn, time.time() - C.TRACK_S - 3600):
@@ -133,10 +140,11 @@ class Collector:
         t.progress_pct = progress_from_mc_sol(t.mc_sol_create)
         if self.sol_usd and t.mc_sol_create:
             t.mc_usd = t.mc_sol_create * self.sol_usd
+            t.mc_create_usd = t.mc_usd
             t.vol_usd = (_f(d.get("solAmount")) or 0) * self.sol_usd
             self._observe(t, t.mc_usd, now)
         t.next_poll = now + 15                     # DexScreener needs a few seconds to index it
-        if not t.mayhem and t.uri:
+        if not t.mayhem and t.uri and in_universe(t):
             self._queue_meta(t)                    # socials, needed at creation by some New columns
         self.tokens[mint] = t
         self.dirty.add(mint)
@@ -192,6 +200,8 @@ class Collector:
                 self._observe(t, t.mc_usd, now, fill_only=True)
         else:
             t.dex_misses = 0
+            if t.mc_create_usd is None and t.mc_sol_create and self.sol_usd:
+                t.mc_create_usd = t.mc_sol_create * self.sol_usd   # SOL price was not known at creation
             if m["mc"]:
                 t.mc_usd = float(m["mc"])
             t.liq_usd = m["liq"]
@@ -305,12 +315,13 @@ class Collector:
                         if stale and t.audits < col.audit_max:
                             if want_audit is None or AUDIT_PRIO.get(col.key, 2) < AUDIT_PRIO.get(want_audit, 2):
                                 want_audit = col.key
-        if (want_audit is None and not t.audits and t.migrated_at is None
+        if (want_audit is None and not t.audits and t.migrated_at is None and in_universe(t)
                 and (t.mc_usd or 0) >= C.AUDIT_MC_USD and now - t.born <= C.AUDIT_EARLY_S):
             want_audit = "early"                   # for the pattern study: on-chain profile of early movers
         if want_audit:
             self._queue_audit(t, want_audit)
-        if (want_meta or (t.mc_usd or 0) >= C.AUDIT_MC_USD) and not t.socials_checked and t.uri:
+        if ((want_meta or (t.mc_usd or 0) >= C.AUDIT_MC_USD) and not t.socials_checked and t.uri
+                and in_universe(t)):
             self._queue_meta(t)
 
     def _new_hit(self, strat: str, col: str, t: Token, feats: dict, now: float) -> None:

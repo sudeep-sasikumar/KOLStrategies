@@ -209,14 +209,15 @@ async function loadReport(s) {
   const c = cols.find(x => x.key === sel) || cols[0];
   $("#report").innerHTML = `
     <div class="tiles" style="margin:12px 0">
-      ${tile("Tokens created", num(u.created), r.coverage.uptime_pct != null ? "stream up " + pct(r.coverage.uptime_pct, 0) + " of the time" : "")}
-      ${tile("Runners", num(u.runners), "peak market cap ≥ " + usd(r.runner_mc) + " within 24 h")}
+      ${tile("pump.fun tokens created", num(u.created), r.coverage.uptime_pct != null ? "stream up " + pct(r.coverage.uptime_pct, 0) + " of the time" : "")}
+      ${tile("Runners", num(u.runners), esc(r.runner_rule))}
       ${tile("Runner rate", pct(u.runner_rate, 2), "of all new tokens")}
       ${tile("Migrations", num(u.migrated))}
+      ${tile("Other launchpads", num(u.other_launchpads), "e.g. Bonk: recorded, not evaluated")}
     </div>
     <div class="tablewrap"><table>
       <tr><th>Column</th><th title="tokens that passed every filter">Hits</th><th>Per hour</th><th title="hits at least 1 hour old">Settled (1h+)</th>
-        <th title="peak after the hit ≥ 2x the market cap at the hit">2x</th><th>5x</th><th>10x</th><th title="peak ≥ runner threshold">Runner</th>
+        <th title="peak after the hit ≥ 2x the market cap at the hit">2x</th><th>5x</th><th>10x</th><th title="${esc(r.runner_rule)}">Runner</th>
         <th>Migrated</th><th title="median peak / market cap at hit">Median peak</th><th title="market cap 1 h after the hit / at the hit">Median 1h</th>
         <th title="runners this column showed / runners it could have shown">Runners caught</th><th title="hits shown per runner caught: the noise">Hits per runner</th></tr>
       ${cols.map(x => { const q = x.rep; return `<tr><td>${esc(x.title)}</td><td>${num(q.hits)}</td><td>${num(q.hits_per_hour, 1)}</td><td>${num(q.matured_1h)}</td>

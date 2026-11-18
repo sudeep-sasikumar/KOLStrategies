@@ -110,7 +110,17 @@ def features(t: Token, now: float, sol_usd: float | None) -> dict:
     }
 
 
+def in_universe(t: Token) -> bool:
+    """The strategies are studied on pump.fun launches only: the bonding-curve maths, snipers and insiders are
+    pump.fun-specific. Other launchpads PumpPortal streams (e.g. Bonk) are still recorded, never evaluated."""
+    if t.pool:
+        return t.pool == "pump"
+    return t.mint.endswith("pump")             # seen only at migration: pump.fun mints end in "pump"
+
+
 def in_stage(col: Column, t: Token, now: float) -> bool:
+    if not in_universe(t):
+        return False
     if col.stage == "migrated":
         return t.migrated_at is not None and now - t.migrated_at <= col.horizon_s
     if t.migrated_at is not None or not t.created_at:

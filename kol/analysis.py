@@ -11,6 +11,11 @@ from . import config as C
 from .strategies.base import Strategy
 from .util import median
 
+# pump.fun launches only (see strategies.base.in_universe); "t" is the tokens table alias
+UNIVERSE = "(t.pool='pump' OR (COALESCE(t.pool,'')='' AND t.mint LIKE '%pump'))"
+RUNNER = (f"(COALESCE(t.peak_mc,0) >= {C.RUNNER_MC_USD} AND COALESCE(t.peak_mc,0) >= "
+          f"{C.RUNNER_MIN_MULT} * COALESCE(t.mc_create_usd,0) AND COALESCE(t.vol_usd,0) >= {C.RUNNER_MIN_VOL_USD})")
+
 SESSIONS = (("Asia", 22, 7), ("Europe", 7, 13), ("EU+US overlap", 13, 16), ("US", 16, 22))
 FEATURES = (
     ("age_min", "Age at hit (min)"), ("mc_usd", "Market cap ($)"), ("vol_usd", "Volume ($)"),
@@ -43,20 +48,23 @@ def _rate(xs: list[bool]) -> float | None:
 def strategy_report(conn: sqlite3.Connection, strat: Strategy, days: float) -> dict:
     now = time.time()
     since = now - days * 86400
-    out = {"days": days, "runner_mc": C.RUNNER_MC_USD, "columns": {}}
+    out = {"days": days, "runner_mc": C.RUNNER_MC_USD, "runner_rule": C.RUNNER_RULE, "columns": {}}
     coverage = conn.execute("SELECT COALESCE(SUM(creates),0) c, COALESCE(SUM(ws_up_s),0) up FROM coverage "
                             "WHERE hour>=?", (int(since // 3600),)).fetchone()
     tracked_s = min(now - since, max(1.0, now - (conn.execute("SELECT MIN(first_seen) FROM tokens").fetchone()[0]
                                                  or now)))
     out["coverage"] = {"creates": coverage["c"], "uptime_pct": min(100.0, coverage["up"] / tracked_s * 100)
                        if tracked_s > 60 else None}
-    created = conn.execute("SELECT COUNT(*) FROM tokens WHERE seen_create=1 AND first_seen>=?", (since,)).fetchone()[0]
+    created = conn.execute(f"SELECT COUNT(*) FROM tokens t WHERE seen_create=1 AND first_seen>=? AND {UNIVERSE}",
+                           (since,)).fetchone()[0]
+    other = conn.execute(f"SELECT COUNT(*) FROM tokens t WHERE seen_create=1 AND first_seen>=? AND NOT {UNIVERSE}",
+                         (since,)).fetchone()[0]
     runners = {r["mint"]: dict(r) for r in conn.execute(
-        "SELECT mint, name, symbol, peak_mc, peak_at, migrated_at, first_seen, mc_1h FROM tokens "
-        "WHERE first_seen>=? AND peak_mc>=? AND seen_create=1", (since, C.RUNNER_MC_USD))}
-    out["universe"] = {"created": created, "runners": len(runners),
+        "SELECT mint, name, symbol, peak_mc, peak_at, migrated_at, first_seen, mc_1h FROM tokens t "
+        f"WHERE first_seen>=? AND seen_create=1 AND {UNIVERSE} AND {RUNNER}", (since,))}
+    out["universe"] = {"created": created, "runners": len(runners), "other_launchpads": other,
                        "runner_rate": len(runners) / created * 100 if created else None,
-                       "migrated": conn.execute("SELECT COUNT(*) FROM tokens WHERE migrated_at>=?",
+                       "migrated": conn.execute(f"SELECT COUNT(*) FROM tokens t WHERE migrated_at>=? AND {UNIVERSE}",
                                                 (since,)).fetchone()[0]}
     for col in strat.columns:
         out["columns"][col.key] = _column_report(conn, strat, col, since, now, runners)
@@ -66,8 +74,9 @@ def strategy_report(conn: sqlite3.Connection, strat: Strategy, days: float) -> d
 
 def _column_report(conn, strat, col, since, now, runners) -> dict:
     rows = conn.execute(
-        "SELECT h.*, t.name, t.symbol, t.peak_mc AS tok_peak, t.migrated_at FROM hits h JOIN tokens t "
-        "ON t.mint=h.mint WHERE h.strategy=? AND h.col=? AND h.hit_at>=? ORDER BY h.hit_at DESC",
+        f"SELECT h.*, t.name, t.symbol, t.peak_mc AS tok_peak, t.migrated_at, {RUNNER} AS is_runner FROM hits h "
+        f"JOIN tokens t ON t.mint=h.mint WHERE h.strategy=? AND h.col=? AND h.hit_at>=? AND {UNIVERSE} "
+        "ORDER BY h.hit_at DESC",
         (strat.key, col.key, since)).fetchall()
     hours = max((now - since) / 3600, 1e-9)
     first = conn.execute("SELECT MIN(hit_at) FROM hits WHERE strategy=? AND col=?", (strat.key, col.key)).fetchone()[0]
@@ -83,7 +92,7 @@ def _column_report(conn, strat, col, since, now, runners) -> dict:
         "rate_2x": _rate([(m or 0) >= 2 for m in mults]),
         "rate_5x": _rate([(m or 0) >= 5 for m in mults]),
         "rate_10x": _rate([(m or 0) >= 10 for m in mults]),
-        "rate_runner": _rate([(r["peak_mc"] or 0) >= C.RUNNER_MC_USD for r in matured]),
+        "rate_runner": _rate([bool(r["is_runner"]) for r in matured]),
         "rate_migrated": _rate([bool(r["migrated_at"]) for r in matured]) if col.stage != "migrated" else None,
         "median_mult": median(mults),
         "median_1h": median([r["mc_1h"] / r["mc_at_hit"] for r in matured if r["mc_1h"] and r["mc_at_hit"]]),
@@ -140,14 +149,14 @@ def _filter_impact(conn, strat: str, col: str, since: float, labels: dict) -> li
     """Tokens that failed exactly one filter: what that filter alone removes (noise vs runners)."""
     agg: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0])
     for r in conn.execute(
-            "SELECT e.failed, t.peak_mc, t.migrated_at FROM evals e JOIN tokens t ON t.mint=e.mint "
-            "WHERE e.strategy=? AND e.col=? AND e.n_failed=1 AND e.at>=?", (strat, col, since)):
+            f"SELECT e.failed, {RUNNER} AS is_runner, t.migrated_at FROM evals e JOIN tokens t ON t.mint=e.mint "
+            f"WHERE e.strategy=? AND e.col=? AND e.n_failed=1 AND e.at>=? AND {UNIVERSE}", (strat, col, since)):
         keys = json.loads(r["failed"] or "[]")
         if len(keys) != 1:
             continue
         a = agg[keys[0]]
         a[0] += 1
-        a[1] += int((r["peak_mc"] or 0) >= C.RUNNER_MC_USD)
+        a[1] += int(bool(r["is_runner"]))
         a[2] += int(bool(r["migrated_at"]))
     return sorted(({"key": k, "label": _label(k, labels), "removed": a[0], "runners_removed": a[1],
                     "migrated_removed": a[2]} for k, a in agg.items()), key=lambda x: -x["removed"])
@@ -200,15 +209,16 @@ def _hit_row(r, now: float) -> dict:
 
 def _daily(conn, strat: Strategy, since: float) -> list[dict]:
     days: dict[str, dict] = defaultdict(lambda: {"created": 0, "runners": 0, "migrated": 0})
-    for r in conn.execute("SELECT date(first_seen,'unixepoch') d, COUNT(*) n, "
-                          "SUM(CASE WHEN peak_mc>=? THEN 1 ELSE 0 END) r FROM tokens WHERE first_seen>=? "
-                          "AND seen_create=1 GROUP BY d", (C.RUNNER_MC_USD, since)):
+    for r in conn.execute(f"SELECT date(first_seen,'unixepoch') d, COUNT(*) n, SUM(CASE WHEN {RUNNER} THEN 1 ELSE 0 "
+                          f"END) r FROM tokens t WHERE first_seen>=? AND seen_create=1 AND {UNIVERSE} GROUP BY d",
+                          (since,)):
         days[r["d"]]["created"], days[r["d"]]["runners"] = r["n"], r["r"]
-    for r in conn.execute("SELECT date(migrated_at,'unixepoch') d, COUNT(*) n FROM tokens WHERE migrated_at>=? "
-                          "GROUP BY d", (since,)):
+    for r in conn.execute(f"SELECT date(migrated_at,'unixepoch') d, COUNT(*) n FROM tokens t WHERE migrated_at>=? "
+                          f"AND {UNIVERSE} GROUP BY d", (since,)):
         days[r["d"]]["migrated"] = r["n"]
-    for r in conn.execute("SELECT date(hit_at,'unixepoch') d, col, COUNT(*) n FROM hits WHERE strategy=? AND "
-                          "hit_at>=? GROUP BY d, col", (strat.key, since)):
+    for r in conn.execute(f"SELECT date(h.hit_at,'unixepoch') d, h.col, COUNT(*) n FROM hits h JOIN tokens t ON "
+                          f"t.mint=h.mint WHERE h.strategy=? AND h.hit_at>=? AND {UNIVERSE} GROUP BY d, h.col",
+                          (strat.key, since)):
         days[r["d"]][f"hits_{r['col']}"] = r["n"]
     return [{"day": d, **v} for d, v in sorted(days.items(), reverse=True)]
 
