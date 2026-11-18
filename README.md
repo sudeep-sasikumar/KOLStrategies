@@ -4,7 +4,7 @@ Studies the memecoin strategies that well-known traders (KOLs) describe. For eac
 on every token the strategy would have shown, follows what happened next, and looks for patterns. The
 results are on a dashboard with one tab per strategy.
 
-**Telegram signals are off.** The bot only sends a start-up notice. Signals are built from patterns
+**Telegram strategy signals are off.** The bot sends a start-up notice and the Market Conditions reports. Signals are built from patterns
 the collected data shows: hundreds of settled hits per column. No rule is guessed in advance.
 
 Strategies so far:
@@ -77,6 +77,73 @@ pump.fun's own APIs are behind Cloudflare bot protection, so they are not used.
 
 ---
 
+## Market Conditions module
+
+`kol/market/`: daily, weekly and monthly reports on market liquidity and trenches activity, sent to Telegram and
+shown on the **Market Conditions** dashboard tab.
+
+**Information only.** It never pauses, resizes, enables or disables a strategy, and no strategy or collector code
+imports it or reads its `mc_*` tables. `tests/test_market.py` checks this.
+
+- **Removing it:** delete the folder plus the lines that start it in `kol/__main__.py` and `kol/web.py`.
+- **Storage:** the project's SQLite database, `kol.sqlite`.
+- **Time zones:** all dates are UTC. Send times are Europe/London.
+- **Settings:** `kol/market/config.json` holds the chains, source URLs, label threshold (±10%) and send times.
+
+**Sources (DefiLlama, free, no key):**
+
+| Code | Data | Endpoint |
+|---|---|---|
+| A | DEX volume per chain | `api.llama.fi/overview/dexs/{chain}` |
+| B | Pump.fun bonding curve | `api.llama.fi/summary/dexs/pump.fun` |
+| C | PumpSwap | `api.llama.fi/summary/dexs/pumpswap` |
+| D | Stablecoin supply per chain | `stablecoins.llama.fi/stablecoincharts/{chain}` |
+| E | Current prices | `coins.llama.fi/prices/current` (raw snapshot only) |
+| F | Daily price history | `coins.llama.fi/chart` |
+
+- **Bridge flows** (`bridges.llama.fi`) return HTTP 402 (paid plan). The source is disabled in the config, and
+  the `mc_bridge_flows` table exists but stays empty.
+- **Prices:** day D's price is the price at D+1 00:00 UTC, i.e. the day's close. DefiLlama's daily points sit at
+  midnight. It allows at most 500 points per request, so each coin is fetched on its own, with 450 days on backfill.
+
+**Schedule (inside the app):**
+- **01:30 UTC:** fetch. It upserts the last 14 days, because DefiLlama revises recent days.
+- **08:00 London:** daily report on the previous UTC day.
+- **Mondays 08:30 London:** weekly report on the completed Monday–Sunday week.
+- **1st of the month, 09:00 London:** monthly report on the completed month.
+- If the app was down at send time, a report is still sent when it comes back, as long as that is within 20 hours.
+
+**Rules:**
+- The current UTC day is never stored or reported.
+- A week or month whose volume is missing a day shows `n/a`, never a partial sum.
+- When a source fails, the others are still stored, and the next report ends with `⚠️ Missing data`.
+- Raw responses are kept in `mc_raw_snapshots`, zlib-compressed. `store.raw_json()` reads one back.
+
+**Tables:**
+- `mc_raw_snapshots`, `mc_daily_metrics`, `mc_reports`, `mc_manual_metrics`, `mc_fetch_log`;
+- `mc_bridge_flows` (empty);
+- `mc_state`: schema version and send attempts.
+
+**Manual commands** (on the VPS, prefix with `docker exec -it <container>`):
+
+```
+python -m kol.market backfill                  # fetch all available history again
+python -m kol.market fetch                     # normal fetch (last 14 days)
+python -m kol.market report weekly             # latest completed week; also daily / monthly
+python -m kol.market report monthly --start 2026-10-01 --send   # a chosen period, posted to Telegram
+python -m kol.market check                     # compares stored weekly totals with the reference values
+```
+
+Every stored report also has a **Send to Telegram** button on the dashboard.
+
+**Adding a chain:**
+1. Add its exact DefiLlama name to `dex_chains` and/or `stablecoin_chains` in `kol/market/config.json`.
+2. Redeploy. The first fetch backfills only 14 days, so run `python -m kol.market backfill` once for its full
+   history.
+
+To give it its own colour in the share chart, add it to `MC_SLOT` in `kol/static/market.js`. Otherwise it is
+grouped in "Other".
+
 ## 2. Deploying on the Hostinger VPS
 
 The image is built by GitHub Actions on every push to `main` and published as
@@ -138,5 +205,6 @@ collector doesn't compute yet, add it to `features()` in `kol/strategies/base.py
 | `kol/strategies/` | strategy definitions (one file each) |
 | `kol/analysis.py` | dashboard numbers (hit rates, recall, missed runners, filter impact, feature comparison) |
 | `kol/web.py`, `kol/static/` | dashboard |
-| `kol/telegram.py` | Telegram (start-up notice only; `SIGNALS_ENABLED = False`) |
+| `kol/telegram.py` | Telegram (start-up notice and Market Conditions reports; strategy signals off: `SIGNALS_ENABLED = False`) |
+| `kol/market/` | Market Conditions module (information only) |
 | `kol/config.py` | environment settings and collector tuning |

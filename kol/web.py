@@ -88,14 +88,15 @@ def board(coll, strat) -> dict:
     return out
 
 
-def build_app(coll, settings: C.Settings, need_login: bool) -> web.Application:
+def build_app(coll, settings: C.Settings, need_login: bool, market=None) -> web.Application:
     secret = _secret(settings.data_dir)
     fails: list[float] = []
     cache: dict = {}
 
     @web.middleware
     async def guard(request: web.Request, handler):
-        open_paths = ("/", "/login", "/healthz", "/static/app.css", "/static/app.js", "/static/favicon.svg")
+        open_paths = ("/", "/login", "/healthz", "/static/app.css", "/static/app.js", "/static/market.js",
+                      "/static/favicon.svg")
         if need_login and request.path not in open_paths and not valid_token(secret, request.cookies.get(COOKIE)):
             return web.json_response({"error": "login required"}, status=401)
         if request.method == "POST":
@@ -199,15 +200,17 @@ def build_app(coll, settings: C.Settings, need_login: bool) -> web.Application:
         web.get("/api/token/{mint}", token),
         web.static("/static", STATIC),
     ])
+    from .market import web as market_web    # Market Conditions page (separate module, information only)
+    market_web.add_routes(app, settings, market)
     return app
 
 
-async def serve(coll, settings: C.Settings) -> None:
+async def serve(coll, settings: C.Settings, market=None) -> None:
     need_login = settings.bind not in LOCAL
     if need_login and not settings.password:
         coll.event("warn", "dashboard is OFF: set DASHBOARD_PASSWORD to open it beyond localhost")
         return
-    runner = web.AppRunner(build_app(coll, settings, need_login), access_log=None)
+    runner = web.AppRunner(build_app(coll, settings, need_login, market), access_log=None)
     await runner.setup()
     await web.TCPSite(runner, settings.bind, settings.port).start()
     log.info("dashboard on http://%s:%d (login %s)", settings.bind, settings.port,

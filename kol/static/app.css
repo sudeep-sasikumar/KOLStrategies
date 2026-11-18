@@ -15,6 +15,8 @@
   --chip-exact: #e3efe3;
   --chip-approx: #f6ecd6;
   --chip-estimate: #f6dede;
+  --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100; --series-5: #e87ba4;
+  --series-6: #008300; --series-7: #6250d6; --series-8: #e34948;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -34,6 +36,8 @@
     --chip-exact: #1f3320;
     --chip-approx: #3a3019;
     --chip-estimate: #3d2222;
+    --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; --series-5: #d55181;
+    --series-6: #0ca30c; --series-7: #9085e9; --series-8: #e66767;
   }
 }
 :root[data-theme="dark"] {
@@ -42,6 +46,8 @@
   --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
   --series-1: #3987e5; --good: #2fb52f; --warning: #d79a1c; --critical: #e66767; --accent: #3987e5;
   --chip-exact: #1f3320; --chip-approx: #3a3019; --chip-estimate: #3d2222;
+  --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; --series-5: #d55181;
+  --series-6: #0ca30c; --series-7: #9085e9; --series-8: #e66767;
 }
 
 * { box-sizing: border-box; }
@@ -131,3 +137,31 @@ details ul { margin: 6px 0 0; padding-left: 18px; color: var(--text-secondary); 
 .login-box button { padding: 8px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font: inherit;
                     font-weight: 600; cursor: pointer; }
 .err { color: var(--critical); min-height: 1em; margin: 0; }
+
+/* ---- Market Conditions ---- */
+.mc-headline { font-size: 22px; font-weight: 700; margin: 8px 0 4px; }
+.mc-svg { width: 100%; height: auto; display: block; overflow: visible; }
+.mc-svg .grid { stroke: var(--border); stroke-width: 1; }
+.mc-svg .base { stroke: var(--text-muted); stroke-width: 1; }
+.mc-svg .axis { fill: var(--text-muted); font-size: 11px; }
+.mc-svg .hit { fill: transparent; cursor: crosshair; }
+.mc-svg .cross { stroke: var(--text-muted); stroke-width: 1; stroke-dasharray: 3 3; }
+.mc-svg path[fill^="var"], .mc-svg rect[fill^="var"] { stroke: var(--surface-1); stroke-width: 0; }
+.mc-svg .dot { stroke: var(--surface-1); stroke-width: 2; }
+.mc-multi { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.mc-multi h4 { margin: 0 0 4px; font-size: 13px; color: var(--text-secondary); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.mc-tip { position: fixed; z-index: 50; pointer-events: none; background: var(--surface-1); color: var(--text-primary);
+          border: 1px solid var(--border); border-radius: 8px; padding: 6px 9px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.18); }
+.mc-tip div { white-space: nowrap; }
+.spark { width: 100%; height: 30px; margin-top: 4px; }
+.chip.lab-rising { background: var(--chip-exact); } .chip.lab-falling { background: var(--chip-estimate); } .chip.lab-flat { background: var(--surface-1); }
+.mc-form { display: flex; flex-wrap: wrap; gap: 6px; }
+.mc-form input { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2);
+                 color: var(--text-primary); font: inherit; min-width: 0; flex: 1 1 120px; }
+.mc-form button, .mc-send { padding: 6px 12px; border: 0; border-radius: 6px; background: var(--accent); color: #fff; font: inherit; cursor: pointer; }
+.mc-report { border-bottom: 1px solid var(--border); padding: 6px 0; }
+.mc-report pre { white-space: pre-wrap; font: 13px/1.45 ui-monospace, Consolas, monospace; background: var(--surface-2);
+                 padding: 10px; border-radius: 8px; overflow-x: auto; }
+.mc-table summary { font-size: 12px; margin-top: 4px; }

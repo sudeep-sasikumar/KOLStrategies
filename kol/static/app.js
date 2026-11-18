@@ -91,7 +91,8 @@ async function refreshStatus() {
 
 // ---- tabs ---------------------------------------------------------------------------------------
 function renderTabs() {
-  const tabs = [{ key: "overview", name: "Overview" }, ...state.strategies.map(s => ({ key: s.key, name: s.name }))];
+  const tabs = [{ key: "overview", name: "Overview" }, { key: "market", name: "Market Conditions" },
+                ...state.strategies.map(s => ({ key: s.key, name: s.name }))];
   if (!tabs.some(t => t.key === state.tab)) state.tab = "overview";
   $("#tabs").innerHTML = tabs.map(t =>
     `<button class="tab ${t.key === state.tab ? "active" : ""}" role="tab" data-tab="${esc(t.key)}">${esc(t.name)}</button>`).join("");
@@ -105,6 +106,7 @@ function clearTimers() { state.timers.forEach(clearInterval); state.timers = [];
 function openTab() {
   clearTimers();
   if (state.tab === "overview") { renderOverview(); return; }
+  if (state.tab === "market") { renderMarket(); return; }
   const s = state.strategies.find(x => x.key === state.tab);
   renderStrategy(s);
 }

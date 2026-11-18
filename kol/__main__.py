@@ -32,13 +32,17 @@ async def main() -> None:
     headers = {"User-Agent": "kol-strategies/1.0"}
     async with aiohttp.ClientSession(headers=headers) as session:
         coll = Collector(s, conn, session)
-        await serve(coll, s)
         tg = Telegram(session, s.tg_token, s.tg_chat)
+        # Market Conditions (information only; the collector and strategies never read it)
+        from .market.scheduler import MarketScheduler
+        market = MarketScheduler(s, session, tg)
+        await serve(coll, s, market)
         link = f"\nDashboard: https://{s.domain}{s.base_path}/" if s.domain else ""
         asyncio.create_task(tg.send(
             f"🟢 <b>KOL Strategies</b> collector online ({esc(s.version)})\n"
             f"Strategies: {esc(', '.join(x.name for x in STRATEGIES))}\n"
             f"Collecting data only - no signals.{link}"))
+        market_task = asyncio.create_task(market.run())  # noqa: F841 - keep a reference
         try:
             await coll.run()
         finally:
