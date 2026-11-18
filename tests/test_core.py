@@ -201,3 +201,12 @@ def test_runner_rule(tmp_path):
     rep = analysis.strategy_report(db.connect(tmp_path / "r.sqlite", readonly=True), STRATEGY, 1)
     assert rep["universe"]["created"] == 3 and rep["universe"]["other_launchpads"] == 1
     assert rep["universe"]["runners"] == 1
+
+
+def test_fast_migration_label():
+    from kol.analysis import fast_migration
+    assert fast_migration(SOON, ["dev?", "fees?"], 1000.0, 1100.0)          # migrated after 100 s, unchecked
+    assert not fast_migration(SOON, ["dev?"], 1000.0, 1000.0 + 3600)        # left after the column's window
+    assert not fast_migration(SOON, ["dev"], 1000.0, 1100.0)                # a real filter failure
+    assert not fast_migration(SOON, ["dev?"], 1000.0, None)                 # never migrated
+    assert not fast_migration(MIGRATED, ["snipers?"], 1000.0, 1100.0)       # only bonding-curve columns

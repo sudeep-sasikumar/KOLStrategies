@@ -60,7 +60,7 @@ def strategy_report(conn: sqlite3.Connection, strat: Strategy, days: float) -> d
     other = conn.execute(f"SELECT COUNT(*) FROM tokens t WHERE seen_create=1 AND first_seen>=? AND NOT {UNIVERSE}",
                          (since,)).fetchone()[0]
     runners = {r["mint"]: dict(r) for r in conn.execute(
-        "SELECT mint, name, symbol, peak_mc, peak_at, migrated_at, first_seen, mc_1h FROM tokens t "
+        "SELECT mint, name, symbol, peak_mc, peak_at, migrated_at, created_at, first_seen, mc_1h FROM tokens t "
         f"WHERE first_seen>=? AND seen_create=1 AND {UNIVERSE} AND {RUNNER}", (since,))}
     out["universe"] = {"created": created, "runners": len(runners), "other_launchpads": other,
                        "runner_rate": len(runners) / created * 100 if created else None,
@@ -113,23 +113,38 @@ def _column_report(conn, strat, col, since, now, runners) -> dict:
     for m in sorted(missed, key=lambda m: -(pool[m]["peak_mc"] or 0))[:300]:
         failed = evals.get(m)
         keys = failed if failed is not None else ["(not evaluated)"]
+        if failed is not None and fast_migration(col, failed, pool[m]["created_at"], pool[m]["migrated_at"]):
+            keys = [FAST]
         for k in keys:
             reasons[k] += 1
         if len(missed_rows) < 40:
             r = pool[m]
             missed_rows.append({"mint": m, "name": r["name"], "symbol": r["symbol"], "peak_mc": r["peak_mc"],
-                                "failed": keys})
+                                "failed": [_label(k, labels) if k == FAST else k for k in keys]})
     labels = {f.key: f.label for f in col.filters}
     res["missed_reasons"] = [{"key": k, "label": _label(k, labels), "n": n} for k, n in reasons.most_common()]
     res["missed"] = missed_rows
-    res["filter_impact"] = _filter_impact(conn, strat.key, col.key, since, labels)
+    res["filter_impact"] = _filter_impact(conn, strat.key, col, since, labels)
     res["features"] = _feature_compare(matured)
     res["sessions"] = _sessions(matured)
     res["recent"] = [_hit_row(r, now) for r in rows[:60]]
     return res
 
 
+FAST = "migrated_fast"
+FAST_LABEL = "Migrated before the on-chain check finished"
+
+
+def fast_migration(col, failed: list[str], created_at, migrated_at) -> bool:
+    """A bonding-curve column's miss that is not a filter failure: the token migrated (left the column) inside
+    the column's window while its on-chain values (holders, dev %, snipers, fees...) were still unknown."""
+    return (col.stage == "bonding" and any(k.endswith("?") for k in failed) and bool(created_at)
+            and bool(migrated_at) and migrated_at - created_at <= col.horizon_s)
+
+
 def _label(k: str, labels: dict) -> str:
+    if k == FAST:
+        return FAST_LABEL
     if k.endswith("?"):
         return labels.get(k[:-1], k[:-1]) + " (not checked yet)"
     return labels.get(k, k)
@@ -145,15 +160,18 @@ def _evals(conn, strat: str, col: str, mints: list[str]) -> dict[str, list[str]]
     return out
 
 
-def _filter_impact(conn, strat: str, col: str, since: float, labels: dict) -> list[dict]:
+def _filter_impact(conn, strat: str, col, since: float, labels: dict) -> list[dict]:
     """Tokens that failed exactly one filter: what that filter alone removes (noise vs runners)."""
     agg: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0])
     for r in conn.execute(
-            f"SELECT e.failed, {RUNNER} AS is_runner, t.migrated_at FROM evals e JOIN tokens t ON t.mint=e.mint "
-            f"WHERE e.strategy=? AND e.col=? AND e.n_failed=1 AND e.at>=? AND {UNIVERSE}", (strat, col, since)):
+            f"SELECT e.failed, {RUNNER} AS is_runner, t.migrated_at, t.created_at FROM evals e JOIN tokens t ON "
+            f"t.mint=e.mint WHERE e.strategy=? AND e.col=? AND e.n_failed=1 AND e.at>=? AND {UNIVERSE}",
+            (strat, col.key, since)):
         keys = json.loads(r["failed"] or "[]")
         if len(keys) != 1:
             continue
+        if fast_migration(col, keys, r["created_at"], r["migrated_at"]):
+            keys = [FAST]
         a = agg[keys[0]]
         a[0] += 1
         a[1] += int(bool(r["is_runner"]))
