@@ -1,0 +1,53 @@
+# KOL Strategies on the VPS (README "Deploying on the Hostinger VPS").
+# Made for Hostinger Docker Manager -> "Compose from URL" with this file's raw GitHub link:
+#   https://raw.githubusercontent.com/sudeep-sasikumar/KOLStrategies/main/docker-compose.yaml
+# Hostinger downloads ONLY this file, so nothing here refers to other files. The image is built
+# by GitHub Actions (.github/workflows/docker-image.yml) on every push; a redeploy pulls the latest.
+# Hostinger keeps the copy of this file from when the project was created: a redeploy updates the
+# image, not this file. When this file changes, paste it into the project's compose editor.
+#
+# HTTPS dashboard: the VPS already runs Traefik (set up for Ignition & Coil). The dashboard is served
+# under /kol/ on the same hostname, so it reuses that hostname's certificate: no new domain needed.
+# No host ports are opened; the dashboard is reached only through Traefik.
+#
+# Environment variables to enter in Docker Manager:
+#   DASHBOARD_PASSWORD   required for the dashboard - pick a long one (without it the dashboard stays off)
+#   TELEGRAM_BOT_TOKEN   optional - only a start-up notice for now (no signals); send-only, can share a bot
+#   TELEGRAM_CHAT_ID     optional - your chat id
+#   SOLANA_RPC_URL       optional - a private RPC (e.g. a free Helius key) if the public one is slow or blocks the VPS
+#   DOMAIN               optional - defaults to this VPS's Hostinger hostname
+services:
+  kol:
+    image: ghcr.io/sudeep-sasikumar/kolstrategies:latest
+    pull_policy: always                   # a redeploy picks up the newest image
+    restart: unless-stopped
+    environment:
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-}
+      DASHBOARD_COOKIE_SECURE: "true"     # the login cookie is only sent over HTTPS
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      SOLANA_RPC_URL: ${SOLANA_RPC_URL:-}
+      DOMAIN: ${DOMAIN:-srv1479428.hstgr.cloud}
+    volumes:
+      - kol_data:/app/data                # database - survives redeploys
+    expose:
+      - "8030"                            # reached only through Traefik
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.kol.rule=Host(`${DOMAIN:-srv1479428.hstgr.cloud}`) && PathPrefix(`/kol`)
+      - traefik.http.routers.kol.entrypoints=websecure
+      - traefik.http.routers.kol.tls=true
+      - traefik.http.routers.kol.tls.certresolver=letsencrypt
+      - traefik.http.routers.kol.middlewares=kol-slash,kol-strip
+      # /kol -> /kol/ (the page loads its data with relative links), then strip /kol for the app
+      - traefik.http.middlewares.kol-slash.redirectregex.regex=^(https?://[^/]+/kol)$$
+      - traefik.http.middlewares.kol-slash.redirectregex.replacement=$${1}/
+      - traefik.http.middlewares.kol-slash.redirectregex.permanent=true
+      - traefik.http.middlewares.kol-strip.stripprefix.prefixes=/kol
+      - traefik.http.services.kol.loadbalancer.server.port=8030
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+volumes:
+  kol_data:
